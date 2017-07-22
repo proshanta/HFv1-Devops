@@ -1,0 +1,45 @@
+Step0:
+	git clone https://github.com/hyperledger/fabric-samples.git
+	cd fabric-samples
+	curl -sSL https://goo.gl/iX9dek | bash
+	export PATH=/c/mywork/fabric-samples/bin:$PATH
+Step1:
+	../bin/cryptogen generate --config=./crypto-config.yaml
+Step2:
+	export FABRIC_CFG_PATH=$PWD
+Step3:
+	../bin/configtxgen -profile TwoOrgsOrdererGenesis -outputBlock ./channel-artifacts/genesis.block
+Step4:
+	export CHANNEL_NAME=mychannel
+Step5:
+	../bin/configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+Step6:
+	../bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+	../bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org2MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org2MSP
+	../bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org3MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org3MSP
+	../bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org4MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org4MSP
+	../bin/configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org5MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org5MSP
+Step7:
+	#CHANNEL_NAME=$CHANNEL_NAME TIMEOUT=86400 docker-compose -f docker-compose-cli.yaml up -d
+	CHANNEL_NAME=$CHANNEL_NAME TIMEOUT=86400 docker-compose -f docker-compose-cli.yaml -f docker-compose-couch.yaml up -d
+Step8:
+	CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+	CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+	CORE_PEER_LOCALMSPID="Org1MSP"
+	CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+Step9:
+	winpty docker exec -it cli bash
+	CHANNEL_NAME=mychannel
+	peer channel create -o orderer.example.com:7050 -c $CHANNEL_NAME -f ./channel-artifacts/channel.tx --tls $CORE_PEER_TLS_ENABLED --cafile /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+	peer channel join -b mychannel.block
+	peer chaincode install -n mycc -v 1.0 -p github.com/hyperledger/fabric/examples/chaincode/go/PSAIntermodal
+	peer chaincode instantiate -o orderer.example.com:7050 --tls $CORE_PEER_TLS_ENABLED --cafile /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C $CHANNEL_NAME -n mycc -v 1.0 -c '{"Args":["init"]}' -P "OR ('Org1MSP.member','Org2MSP.member','Org3MSP.member','Org4MSP.member')"
+	invoke:
+		peer chaincode invoke -o orderer.example.com:7050  --tls $CORE_PEER_TLS_ENABLED --cafile /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem  -C $CHANNEL_NAME -n mycc -c '{"Args":["createVoyage","{\"voyageId\":\"1\",\"bto\":\"PSA\",\"origin\":\"kolkata\",\"destination\":\"pune\",\"trainId\":\"123\",\"week\":\"2\",\"day\":\"2\",\"departureTime\":\"11:11:11\",\"arrivalTime\":\"11:11:11\",\"capacity\":\"50\",\"createdAt\":\"11:11:11\"}","RB"]}'
+		peer chaincode invoke -o orderer.example.com:7050  --tls $CORE_PEER_TLS_ENABLED --cafile /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem  -C $CHANNEL_NAME -n mycc -c '{"Args":["createBooking","{\"bookingId\":\"2\",\"sl\":\"SL\",\"voyageId\":\"1\",\"containerIds\":\"123\",\"createdAt\":\"11:11:11\"}","SL"]}'
+	query:
+		peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["getVoyage","{\"voyageId\":\"1\"}","RB"]}'
+		peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["getVoyagesByBtoAndOrigin","{\"bto\":\"PSA\",\"origin\":\"kolkata\"}","RB"]}'
+		peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["getBooking","{\"bookingId\":\"2\"}","RB"]}'
+		peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["getVoyagesByBtoAndOrigin","{\"bto\":\"bto\",\"origin\":\"kolkata\"}","RB"]}'
+		peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["getBookingsByBtoAndStatus","{\"bto\":\"bto\",\"status\":\"CONFIRMED\"}","RB"]}'		
